@@ -1,0 +1,77 @@
+{
+  "name": "pl_csv_to_bronze",
+  "properties": {
+    "description": "Copie les fichiers d'objectifs déposés dans landing/objectifs vers Bronze.",
+    "activities": [
+      {
+        "name": "cp_csv_to_bronze",
+        "type": "Copy",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "source": {
+            "type": "DelimitedTextSource",
+            "storeSettings": {
+              "type": "AzureBlobFSReadSettings",
+              "recursive": true,
+              "wildcardFolderPath": "objectifs",
+              "wildcardFileName": "*.csv",
+              "enablePartitionDiscovery": false
+            },
+            "formatSettings": {
+              "type": "DelimitedTextReadSettings"
+            }
+          },
+          "sink": {
+            "type": "DelimitedTextSink",
+            "storeSettings": {
+              "type": "AzureBlobFSWriteSettings"
+            },
+            "formatSettings": {
+              "type": "DelimitedTextWriteSettings",
+              "quoteAllText": false,
+              "fileExtension": ".csv"
+            }
+          },
+          "enableStaging": false
+        },
+        "inputs": [
+          {
+            "referenceName": "ds_adls_csv",
+            "type": "DatasetReference",
+            "parameters": {
+              "container": "landing",
+              "folder": "objectifs",
+              "file": ""
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "ds_adls_csv",
+            "type": "DatasetReference",
+            "parameters": {
+              "container": "bronze",
+              "folder": {
+                "value": "csv/objectifs/load_date=@{formatDateTime(utcNow(),'yyyy-MM-dd')}",
+                "type": "Expression"
+              },
+              "file": {
+                "value": "objectifs_@{pipeline().RunId}.csv",
+                "type": "Expression"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "folder": {
+      "name": "ingestion"
+    }
+  }
+}

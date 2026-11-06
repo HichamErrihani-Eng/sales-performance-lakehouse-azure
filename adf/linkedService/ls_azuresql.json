@@ -1,0 +1,22 @@
+{
+  "name": "ls_azuresql",
+  "properties": {
+    "type": "AzureSqlDatabase",
+    "typeProperties": {
+      "server": "sql-hicham-sales.database.windows.net",
+      "database": "sqldb-adventureworks",
+      "encrypt": "mandatory",
+      "trustServerCertificate": false,
+      "authenticationType": "SQL",
+      "userName": "sqladmin",
+      "password": {
+        "type": "AzureKeyVaultSecret",
+        "store": {
+          "referenceName": "ls_keyvault",
+          "type": "LinkedServiceReference"
+        },
+        "secretName": "sql-admin-password"
+      }
+    }
+  }
+}

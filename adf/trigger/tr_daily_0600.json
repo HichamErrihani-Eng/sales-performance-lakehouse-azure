@@ -1,0 +1,31 @@
+{
+  "name": "tr_daily_0600",
+  "properties": {
+    "type": "ScheduleTrigger",
+    "runtimeState": "Stopped",
+    "pipelines": [
+      {
+        "pipelineReference": {
+          "referenceName": "pl_master",
+          "type": "PipelineReference"
+        }
+      }
+    ],
+    "typeProperties": {
+      "recurrence": {
+        "frequency": "Day",
+        "interval": 1,
+        "startTime": "2026-11-10T06:00:00",
+        "timeZone": "Morocco Standard Time",
+        "schedule": {
+          "hours": [
+            6
+          ],
+          "minutes": [
+            0
+          ]
+        }
+      }
+    }
+  }
+}

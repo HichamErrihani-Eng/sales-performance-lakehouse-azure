@@ -1,0 +1,75 @@
+{
+  "name": "pl_master",
+  "properties": {
+    "description": "Orchestration complète : 3 ingestions en parallèle, puis transformation Databricks.",
+    "activities": [
+      {
+        "name": "run_sql_to_bronze",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "pl_sql_to_bronze",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "run_csv_to_bronze",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "pl_csv_to_bronze",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "run_api_fx_to_bronze",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "pl_api_fx_to_bronze",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        }
+      },
+      {
+        "name": "run_transform",
+        "type": "ExecutePipeline",
+        "typeProperties": {
+          "pipeline": {
+            "referenceName": "pl_transform_databricks",
+            "type": "PipelineReference"
+          },
+          "waitOnCompletion": true
+        },
+        "dependsOn": [
+          {
+            "activity": "run_sql_to_bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          },
+          {
+            "activity": "run_csv_to_bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          },
+          {
+            "activity": "run_api_fx_to_bronze",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      }
+    ],
+    "folder": {
+      "name": "orchestration"
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ls_adls",
+  "properties": {
+    "type": "AzureBlobFS",
+    "typeProperties": {
+      "url": "https://sthichamsales.dfs.core.windows.net/"
+    }
+  }
+}

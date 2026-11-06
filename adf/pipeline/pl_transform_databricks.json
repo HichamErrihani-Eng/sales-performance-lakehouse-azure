@@ -1,0 +1,208 @@
+{
+  "name": "pl_transform_databricks",
+  "properties": {
+    "description": "Bronze -> Silver (MERGE) -> Gold, puis contrôles qualité.",
+    "parameters": {
+      "notebook_root": {
+        "type": "string",
+        "defaultValue": "/Workspace/Users/<VOTRE-EMAIL>/azure-sales-pipeline/databricks"
+      },
+      "storage_account": {
+        "type": "string",
+        "defaultValue": "sthichamsales"
+      },
+      "catalog": {
+        "type": "string",
+        "defaultValue": "sales_demo"
+      }
+    },
+    "activities": [
+      {
+        "name": "nb_silver_sql",
+        "type": "DatabricksNotebook",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": {
+            "value": "@{pipeline().parameters.notebook_root}/01_bronze_to_silver_sql",
+            "type": "Expression"
+          },
+          "baseParameters": {
+            "storage_account": {
+              "value": "@pipeline().parameters.storage_account",
+              "type": "Expression"
+            },
+            "catalog": {
+              "value": "@pipeline().parameters.catalog",
+              "type": "Expression"
+            }
+          }
+        }
+      },
+      {
+        "name": "nb_silver_objectifs",
+        "type": "DatabricksNotebook",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": {
+            "value": "@{pipeline().parameters.notebook_root}/02_bronze_to_silver_objectifs",
+            "type": "Expression"
+          },
+          "baseParameters": {
+            "storage_account": {
+              "value": "@pipeline().parameters.storage_account",
+              "type": "Expression"
+            },
+            "catalog": {
+              "value": "@pipeline().parameters.catalog",
+              "type": "Expression"
+            }
+          }
+        }
+      },
+      {
+        "name": "nb_silver_fx",
+        "type": "DatabricksNotebook",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": {
+            "value": "@{pipeline().parameters.notebook_root}/03_bronze_to_silver_fx",
+            "type": "Expression"
+          },
+          "baseParameters": {
+            "storage_account": {
+              "value": "@pipeline().parameters.storage_account",
+              "type": "Expression"
+            },
+            "catalog": {
+              "value": "@pipeline().parameters.catalog",
+              "type": "Expression"
+            }
+          }
+        }
+      },
+      {
+        "name": "nb_gold",
+        "type": "DatabricksNotebook",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": {
+            "value": "@{pipeline().parameters.notebook_root}/04_silver_to_gold",
+            "type": "Expression"
+          },
+          "baseParameters": {
+            "storage_account": {
+              "value": "@pipeline().parameters.storage_account",
+              "type": "Expression"
+            },
+            "catalog": {
+              "value": "@pipeline().parameters.catalog",
+              "type": "Expression"
+            }
+          }
+        },
+        "dependsOn": [
+          {
+            "activity": "nb_silver_sql",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          },
+          {
+            "activity": "nb_silver_objectifs",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          },
+          {
+            "activity": "nb_silver_fx",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "nb_quality",
+        "type": "DatabricksNotebook",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 2,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "linkedServiceName": {
+          "referenceName": "ls_databricks",
+          "type": "LinkedServiceReference"
+        },
+        "typeProperties": {
+          "notebookPath": {
+            "value": "@{pipeline().parameters.notebook_root}/05_quality_checks",
+            "type": "Expression"
+          },
+          "baseParameters": {
+            "storage_account": {
+              "value": "@pipeline().parameters.storage_account",
+              "type": "Expression"
+            },
+            "catalog": {
+              "value": "@pipeline().parameters.catalog",
+              "type": "Expression"
+            }
+          }
+        },
+        "dependsOn": [
+          {
+            "activity": "nb_gold",
+            "dependencyConditions": [
+              "Succeeded"
+            ]
+          }
+        ]
+      }
+    ],
+    "folder": {
+      "name": "transformation"
+    }
+  }
+}

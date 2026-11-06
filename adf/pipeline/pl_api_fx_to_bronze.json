@@ -1,0 +1,83 @@
+{
+  "name": "pl_api_fx_to_bronze",
+  "properties": {
+    "description": "Récupère les taux de change BCE (API Frankfurter) vers Bronze, au format JSON.",
+    "parameters": {
+      "start_date": {
+        "type": "string",
+        "defaultValue": "2008-01-01"
+      },
+      "end_date": {
+        "type": "string",
+        "defaultValue": "2008-12-31"
+      },
+      "symbols": {
+        "type": "string",
+        "defaultValue": "EUR,GBP,CAD"
+      }
+    },
+    "activities": [
+      {
+        "name": "cp_api_fx_to_bronze",
+        "type": "Copy",
+        "policy": {
+          "timeout": "0.01:00:00",
+          "retry": 3,
+          "retryIntervalInSeconds": 60,
+          "secureOutput": false,
+          "secureInput": false
+        },
+        "typeProperties": {
+          "source": {
+            "type": "RestSource",
+            "httpRequestTimeout": "00:02:00",
+            "requestInterval": "00.00:00:00.010",
+            "requestMethod": "GET"
+          },
+          "sink": {
+            "type": "JsonSink",
+            "storeSettings": {
+              "type": "AzureBlobFSWriteSettings"
+            },
+            "formatSettings": {
+              "type": "JsonWriteSettings"
+            }
+          },
+          "enableStaging": false
+        },
+        "inputs": [
+          {
+            "referenceName": "ds_rest_frankfurter",
+            "type": "DatasetReference",
+            "parameters": {
+              "relativeUrl": {
+                "value": "v1/@{pipeline().parameters.start_date}..@{pipeline().parameters.end_date}?base=USD&symbols=@{pipeline().parameters.symbols}",
+                "type": "Expression"
+              }
+            }
+          }
+        ],
+        "outputs": [
+          {
+            "referenceName": "ds_adls_json",
+            "type": "DatasetReference",
+            "parameters": {
+              "container": "bronze",
+              "folder": {
+                "value": "api/frankfurter/load_date=@{formatDateTime(utcNow(),'yyyy-MM-dd')}",
+                "type": "Expression"
+              },
+              "file": {
+                "value": "fx_@{pipeline().RunId}.json",
+                "type": "Expression"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "folder": {
+      "name": "ingestion"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "ls_databricks",
+  "properties": {
+    "type": "AzureDatabricks",
+    "typeProperties": {
+      "domain": "https://<ADB-WORKSPACE>.azuredatabricks.net",
+      "authentication": "MSI",
+      "workspaceResourceId": "/subscriptions/<ID-ABONNEMENT>/resourceGroups/rg_sales_lakehouse/providers/Microsoft.Databricks/workspaces/<NOM-WORKSPACE>",
+      "existingClusterId": "<ID-CLUSTER>"
+    }
+  }
+}
