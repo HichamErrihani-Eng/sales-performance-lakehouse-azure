@@ -11,11 +11,14 @@ from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
 dbutils.widgets.text("storage_account", "sthichamsales")
-dbutils.widgets.text("catalog", "sales_demo")
+dbutils.widgets.text("catalog", "workspace")
+# Chemin Bronze explicite (volume Databricks Free Edition). Vide = Data Lake Azure.
+dbutils.widgets.text("bronze_path", "/Volumes/workspace/default/raw/bronze")
 
 STORAGE_ACCOUNT = dbutils.widgets.get("storage_account")
 CATALOG = dbutils.widgets.get("catalog")
-BRONZE = f"abfss://bronze@{STORAGE_ACCOUNT}.dfs.core.windows.net"
+BRONZE = (dbutils.widgets.get("bronze_path").strip().rstrip("/")
+          or f"abfss://bronze@{STORAGE_ACCOUNT}.dfs.core.windows.net")
 RUN_TS = datetime.now(timezone.utc)
 
 # COMMAND ----------

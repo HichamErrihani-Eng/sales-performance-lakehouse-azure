@@ -12,7 +12,8 @@
 # COMMAND ----------
 
 dbutils.widgets.text("storage_account", "sthichamsales")
-dbutils.widgets.text("catalog", "sales_demo")
+dbutils.widgets.text("catalog", "workspace")
+dbutils.widgets.text("bronze_path", "/Volumes/workspace/default/raw/bronze")
 # Laisser vide si le metastore a un stockage par défaut.
 # Sinon : abfss://lakehouse@sthichamsales.dfs.core.windows.net/sales_demo (external location requise)
 dbutils.widgets.text("managed_location", "")
@@ -23,10 +24,11 @@ managed_location = dbutils.widgets.get("managed_location").strip()
 
 # COMMAND ----------
 
-if managed_location:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog} MANAGED LOCATION '{managed_location}'")
-else:
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
+if catalog != "workspace":   # "workspace" existe deja (Free Edition)
+    if managed_location:
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog} MANAGED LOCATION '{managed_location}'")
+    else:
+        spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.silver COMMENT 'Données nettoyées et dédoublonnées'")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.gold COMMENT 'Tables métier prêtes pour Power BI'")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.ops COMMENT 'Rejets et journal qualité'")
@@ -34,7 +36,8 @@ spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.ops COMMENT 'Rejets et journal
 # COMMAND ----------
 
 # Test d'accès au conteneur bronze (doit lister les dossiers sqlserver, api, csv après le premier run ADF)
-bronze_root = f"abfss://bronze@{storage_account}.dfs.core.windows.net/"
+bronze_root = (dbutils.widgets.get("bronze_path").strip()
+               or f"abfss://bronze@{storage_account}.dfs.core.windows.net/")
 display(dbutils.fs.ls(bronze_root))
 
 # COMMAND ----------
