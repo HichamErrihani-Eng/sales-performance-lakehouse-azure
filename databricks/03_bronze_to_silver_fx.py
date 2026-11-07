@@ -22,7 +22,9 @@ schema = StructType([
 ])
 
 raw = spark.read.text(f"{BRONZE}/api/frankfurter", wholetext=True)
-parsed = raw.select(F.from_json("value", schema).alias("j"), "load_date")
+# Data Factory ecrit le JSON avec un BOM UTF-8 : on le retire avant le parsing.
+parsed = raw.select(F.from_json(F.regexp_replace("value", "^\\uFEFF", ""), schema).alias("j"), "load_date")
+print("fichiers lus :", raw.count(), "| JSON valides :", parsed.filter("j is not null").count())
 
 rates = (parsed
     .select("j.base", "load_date", F.explode("j.rates").alias("date_taux", "taux_par_devise"))
