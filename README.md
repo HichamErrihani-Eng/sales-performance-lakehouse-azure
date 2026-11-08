@@ -1,108 +1,202 @@
-# Pipeline de ventes multi-sources sur Azure
+# Sales Performance Lakehouse — Azure
 
-**EN —** End-to-end Azure data pipeline: three heterogeneous sources (SQL Server, CSV, REST API) ingested by a metadata-driven, incremental Azure Data Factory pipeline into ADLS Gen2, transformed with Databricks (PySpark, Delta Lake, MERGE) through a Bronze/Silver/Gold medallion architecture, governed with Unity Catalog and Key Vault, and served in Power BI.
+**Un pipeline de données de bout en bout qui répond chaque matin à une question de direction commerciale : atteignons-nous nos objectifs de ventes, par pays et par mois, en euros ?**
+
+![Azure Data Factory](https://img.shields.io/badge/Azure_Data_Factory-0078D4?logo=microsoftazure&logoColor=white)
+![ADLS Gen2](https://img.shields.io/badge/ADLS_Gen2-0078D4?logo=microsoftazure&logoColor=white)
+![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white)
+![Delta Lake](https://img.shields.io/badge/Delta_Lake-003366?logo=delta&logoColor=white)
+![PySpark](https://img.shields.io/badge/PySpark-E25A1C?logo=apachespark&logoColor=white)
+![Power BI](https://img.shields.io/badge/Power_BI-F2C811?logo=powerbi&logoColor=black)
+![Key Vault](https://img.shields.io/badge/Key_Vault-0078D4?logo=microsoftazure&logoColor=white)
+
+![Rapport Power BI — Vue d'ensemble](powerbi/01_vue_ensemble.png)
+
+> Projet personnel de portfolio, conduit selon une démarche de mission client : besoin métier, livrables, contrôles qualité et documentation.
+> Données : base exemple Microsoft **AdventureWorksLT** (32 commandes, 2008), taux de change **réels** de la BCE, objectifs de ventes **fictifs**.
+
+---
+
+## En 30 secondes
+
+- **Problème** : ventes, objectifs et taux de change sont dans 3 sources différentes, en 2 devises.
+- **Solution** : ingestion Azure Data Factory pilotée par métadonnées, architecture médaillon sur ADLS Gen2, transformations PySpark/Delta sur Databricks, rapport Power BI de 4 pages.
+- **Incrémental prouvé** : 2 624 lignes au 1er chargement, puis **2 lignes** après modification de 2 commandes.
+- **Fiabilité vérifiée** : 6/6 contrôles qualité OK ; total **956 323,59 USD** identique en Silver, en Gold et dans Power BI.
+- **Sécurité et coût** : aucun secret dans le code (Key Vault, identités managées) ; coût d'exécution quasi nul.
+
+---
 
 ## Le besoin métier
-Une entreprise de vente veut savoir **chaque matin** si elle atteint ses objectifs, **par pays et par mois**, dans **une seule devise (EUR)**.
-Ses données sont dispersées :
 
-| Source | Contenu | Format |
-| --- | --- | --- |
-| SQL Server (Azure SQL) | Commandes, clients, adresses, produits | Base relationnelle |
-| Fichiers déposés par le contrôle de gestion | Objectifs de ventes par mois et par pays | CSV |
-| API Frankfurter (taux BCE) | Taux de change quotidiens USD → EUR | REST / JSON |
+La direction commerciale veut un indicateur unique : **taux d'atteinte des objectifs, par pays et par mois, en EUR**.
 
-> Données : base d'exemple Microsoft **AdventureWorksLT** ; objectifs **fictifs** générés pour la démonstration (`data/objectifs_ventes_2008.csv`) ; taux de change **réels** de la BCE.
+| Source | Contenu | Format | Fréquence |
+| --- | --- | --- | --- |
+| Azure SQL Database | Commandes, lignes, clients, adresses, produits (7 tables) | Relationnel | Quotidienne, incrémentale |
+| Contrôle de gestion | Objectifs de ventes mensuels par pays | CSV | Dépôt manuel |
+| API Frankfurter (BCE) | Taux de change USD → EUR, GBP, CAD | REST / JSON | Quotidienne |
+
+---
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A[(SQL Server<br/>AdventureWorksLT)] --> ADF
+    A[(Azure SQL<br/>7 tables)] --> ADF
     B[/CSV objectifs/] --> ADF
-    C{{API Frankfurter<br/>taux BCE}} --> ADF
-    ADF[Azure Data Factory<br/>pilotée par métadonnées<br/>+ watermark] --> BR[Bronze<br/>fichiers bruts]
-    subgraph ADLS Gen2 + Databricks
-    BR --> SI[Silver<br/>Delta, MERGE, qualité]
-    SI --> GO[Gold<br/>ventes vs objectifs]
+    C{{API BCE<br/>taux de change}} --> ADF
+    ADF[Azure Data Factory<br/>table de contrôle + watermark] --> BR[Bronze<br/>ADLS Gen2 · brut]
+    subgraph Databricks
+    BR --> SI[Silver<br/>Delta · MERGE · qualité]
+    SI --> GO[Gold<br/>KPI métier]
     end
-    GO --> PBI[Power BI]
-    KV[Key Vault] -.secrets.-> ADF
-    UC[Unity Catalog] -.droits, lignage.-> SI
+    GO --> PBI[Power BI<br/>4 pages]
+    KV[Key Vault] -.secret SQL.-> ADF
+    MI[Identités managées · RBAC] -.accès.-> BR
 ```
 
-## Ce que montre ce projet
+**Pipeline d'ingestion SQL piloté par métadonnées** : une seule définition charge les 7 tables. Ajouter une table = ajouter une ligne dans `etl.ControlTable`.
 
-| Compétence | Mise en œuvre |
+![Pipeline Azure Data Factory](docs/images/adf_pipeline.png)
+
+```
+lkp_control_table → ForEach (4 tables en parallèle)
+                     ├─ lkp_new_watermark   : MAX(ModifiedDate) actuel
+                     ├─ cp_sql_to_bronze    : lignes entre ancien et nouveau watermark → Parquet
+                     └─ sp_update_watermark : procédure stockée etl.usp_UpdateWatermark
+```
+
+---
+
+## Résultats vérifiés
+
+| Vérification | Résultat |
 | --- | --- |
-| Intégration de sources hétérogènes | SQL, CSV et API REST dans le même modèle |
-| Industrialisation | **Un seul pipeline** piloté par la table `etl.ControlTable` (Lookup → ForEach → Copy) |
-| Chargement incrémental | Watermark sur `ModifiedDate`, mis à jour par procédure stockée |
-| Idempotence | `MERGE` Delta en Silver : relancer ne crée jamais de doublons |
-| Qualité des données | Règles par source, table `ops.rejets`, journal `ops.journal_qualite`, contrôles bloquants |
-| Gestion des taux manquants | Calendrier complet + report du dernier taux connu (week-ends, jours fériés) |
-| Sécurité et gouvernance | Mot de passe SQL dans Key Vault, identités managées, Unity Catalog |
-| Orchestration | `pl_master` : 3 ingestions en parallèle puis Databricks, déclencheur quotidien |
-| Restitution | Power BI : ventes, objectifs, taux d'atteinte, catégories |
+| 1er chargement SQL → Bronze | **2 624 lignes**, 7 tables, ~1 min 30 |
+| 2e chargement après modification de 2 commandes | **2 lignes** (SalesOrderHeader), 0 pour les 6 autres tables |
+| Ingestion API BCE et CSV | Réussies (17 s et 16 s) |
+| Contrôles qualité Databricks | **6 / 6 OK**, 0 ligne rejetée |
+| Total USD Silver = Gold | **956 323,59 = 956 323,59** |
+| Contrôle croisé Power BI | 956 323,59 USD, **32 commandes** |
+
+---
+
+## Décisions d'architecture
+
+| Décision | Alternative | Pourquoi |
+| --- | --- | --- |
+| Watermark sur `ModifiedDate` | Change Data Capture | Colonne fiable dans la source, solution simple et peu coûteuse. Le CDC serait requis pour capter les suppressions. |
+| Table de contrôle (Lookup → ForEach) | Un pipeline par table | Une seule définition à maintenir ; l'ajout d'une table ne touche pas au code. |
+| Parquet en Bronze, Delta dès Silver | Delta partout | Bronze reste une copie brute rejouable ; Delta apporte MERGE, transactions et historique là où on transforme. |
+| `MERGE` Delta en Silver | Overwrite | Idempotence : relancer un traitement ne crée jamais de doublons. |
+| Gold recalculée (`overwrite`) | MERGE en Gold | Tables petites, toujours cohérentes avec Silver, logique plus simple. |
+| Key Vault + identités managées | Mot de passe dans le service lié | Aucun secret dans le code ni dans Git ; droits RBAC au plus juste. |
+| Databricks Free Edition | Azure Databricks | Coût maîtrisé pour un portfolio. Les notebooks sont prêts pour Azure Databricks (`bronze_path` vide = lecture directe d'ADLS). |
+
+---
+
+## Qualité et fiabilité
+
+| # | Contrôle | Bloquant |
+| --- | --- | --- |
+| 1 | Doublons de commandes dans Silver | Oui |
+| 2 | Commandes sans taux EUR | Oui |
+| 3 | Commandes sans adresse ou pays | Non |
+| 4 | Total USD Silver = Gold | Oui |
+| 5 | Mois ou pays vendus sans objectif | Non |
+| 6 | Lignes rejetées dans la journée | Non |
+
+- Les lignes invalides (clé vide, taux négatif, pays inconnu…) vont dans `ops.rejets` avec leur raison : **le pipeline continue**.
+- Chaque exécution est historisée dans `ops.journal_qualite`.
+- Un contrôle bloquant en échec **arrête le traitement** avant que des chiffres faux n'atteignent le rapport.
+- Les taux non publiés (week-ends, jours fériés) sont complétés par le dernier taux connu : chaque commande a un taux.
+
+---
+
+## Problèmes rencontrés et résolus
+
+| Symptôme | Cause | Solution |
+| --- | --- | --- |
+| Délai de connexion dépassé | Base Serverless en pause automatique | Réessai après réveil ; en production : politique de retry sur l'activité |
+| Connexion SQL refusée | Adresse IP du poste qui change | Règles de pare-feu par plage d'adresses |
+| Pipeline CSV en échec | JSON invalide (paramètre vide, `quoteAllText`) | Correction de la définition et redéploiement par commit Git |
+| Notebook des taux : 0 ligne, sans erreur | BOM UTF-8 en tête du JSON écrit par Data Factory | Inspection du fichier brut, retrait du BOM avant parsing, ligne de contrôle ajoutée |
+| Montants multipliés par 100 dans Power BI | Séparateur décimal mal interprété | Paramètres régionaux d'import en Anglais (États-Unis) |
+| CA par catégorie ≠ CA total | `LineTotal` (hors taxes et port) vs `TotalDue` (facturé) | Définition de chaque indicateur documentée dans le rapport |
+
+---
+
+## Rapport Power BI
+
+| Page | Contenu |
+| --- | --- |
+| Vue d'ensemble | 6 KPI, ventes vs objectif par mois, jauge d'atteinte colorée, cumul annuel, segments |
+| Performance par pays | Ventes vs objectif, répartition, matrice pays × trimestre avec statut (vert / orange / rouge) |
+| Produits | Top 10 des catégories, évolution mensuelle, part et rang |
+| Qualité & architecture | Schéma du pipeline, contrôles qualité, preuve de l'incrémental |
+
+| Performance par pays | Qualité & architecture |
+| --- | --- |
+| ![Pays](powerbi/02_performance_pays.png) | ![Qualité](powerbi/04_qualite_architecture.png) |
+
+Modèle en étoile (table Calendrier) · 20 mesures DAX créées par script **TMDL** · seuils d'atteinte centralisés dans une mesure · navigation par boutons.
+
+📄 [Rapport complet en PDF](powerbi/Sales_Performance_Lakehouse.pdf) · source : `powerbi/Sales_Performance_Lakehouse.pbix`
+
+---
+
+## Ce que 20 ans de données m'ont appris à exiger
+
+- **Un chiffre doit pouvoir se prouver** : d'où le contrôle « total Silver = Gold » et le recoupement dans Power BI.
+- **Une erreur silencieuse est pire qu'une erreur visible** : d'où les contrôles bloquants et la table de rejets.
+- **Un indicateur doit avoir une définition écrite** : CA facturé et CA produits sont distingués et documentés.
+- **La traçabilité n'est pas optionnelle** : watermark, journal qualité, chaque correction versionnée dans Git.
+- Ces exigences viennent de 20 ans en environnement industriel de défense (General Dynamics Land Systems, Leonardo DRS) et institutionnel (AUF).
+
+---
+
+## Passage en production
+
+| Aujourd'hui (portfolio) | En production |
+| --- | --- |
+| Notebooks sur Databricks Free Edition | Azure Databricks, lancé par `pl_transform_databricks` |
+| Exécutions manuelles | `pl_master` (3 ingestions en parallèle puis transformation) + déclencheur quotidien 06:00 |
+| Watermark | CDC si les suppressions doivent être suivies |
+| Ressources créées dans le portail | Infrastructure en code (Bicep ou Terraform) |
+| Branche `main` unique | CI/CD (GitHub Actions, dev/test/prod, Databricks Asset Bundles) |
+| Contrôles dans le journal | Alertes Azure Monitor sur échec de pipeline ou de contrôle |
+
+---
 
 ## Structure du dépôt
 
 ```
-sql/
-  01_control_table.sql            Table de contrôle (métadonnées + watermark)
-  02_update_watermark_proc.sql    Procédure de mise à jour du watermark
-  03_test_incremental.sql         Test : modifier 2 commandes et relancer
-  04_optionnel_etaler_dates_2008.sql  Répartir les commandes sur 2008 (démo)
-data/
-  objectifs_ventes_2008.csv       Objectifs mensuels par pays (fictifs)
-adf/
-  linkedService/  dataset/  pipeline/  trigger/   Définitions JSON Data Factory
-databricks/
-  00_setup.py  00_common.py
-  01_bronze_to_silver_sql.py      7 tables SQL → Silver (MERGE)
-  02_bronze_to_silver_objectifs.py
-  03_bronze_to_silver_fx.py       JSON API → taux quotidiens complets
-  04_silver_to_gold.py            ventes_vs_objectifs, ventes_par_categorie
-  05_quality_checks.py            Contrôles, journal, échec si bloquant
-powerbi/
-  mesures_dax.md
-docs/
-  GUIDE_ETAPES.md                 Déploiement pas à pas
+sql/          Table de contrôle, procédure watermark, test incrémental
+data/         Objectifs mensuels par pays (fictifs)
+adf/          linkedService/ dataset/ pipeline/ trigger/  (JSON, relié à Data Factory)
+databricks/   00_setup, 00_common, 01 à 05 (Bronze → Silver → Gold, qualité)
+powerbi/      Rapport .pbix, export PDF, captures, mesures DAX
+docs/         GUIDE_ETAPES.md, images
 ```
 
-## Modèle Gold
+**Reproduire** : voir [docs/GUIDE_ETAPES.md](docs/GUIDE_ETAPES.md).
 
-`gold.ventes_vs_objectifs` — grain : **un mois × un pays**
-
-| Colonne | Description |
-| --- | --- |
-| mois | AAAA-MM |
-| pays | Pays de livraison |
-| nb_commandes | Nombre de commandes |
-| ventes_usd / ventes_eur | Montant TTC, converti au taux BCE du jour de la commande |
-| objectif_eur | Objectif du contrôle de gestion |
-| taux_atteinte | ventes_eur / objectif_eur |
-| ecart_eur | ventes_eur − objectif_eur |
-
-`gold.ventes_par_categorie` — grain : **un mois × une catégorie de produit**.
-
-## Choix techniques
-- **Watermark plutôt que CDC** : la source a une colonne `ModifiedDate` fiable, c'est la solution la plus simple. Pour les suppressions, il faudrait le Change Data Capture.
-- **Parquet en Bronze, Delta à partir de Silver** : Bronze est une copie brute ; Delta apporte MERGE, historique et transactions.
-- **Gold recalculée (`overwrite`)** : tables petites, toujours cohérentes avec Silver.
-- **Report du dernier taux connu** : la BCE ne publie pas le week-end ; sans cela, des commandes resteraient sans conversion.
-
-## Améliorations prévues
-- Auto Loader pour l'ingestion des fichiers en Bronze.
-- Déploiement CI/CD (Git Azure DevOps ou GitHub Actions, environnements dev/test/prod, Databricks Asset Bundles).
-- Infrastructure en code (Bicep ou Terraform).
-- Alertes Azure Monitor sur les échecs de `pl_master`.
-
-## Démarrer
-Voir **[docs/GUIDE_ETAPES.md](docs/GUIDE_ETAPES.md)**.
-
-## Coût
-Base Azure SQL *Basic*, stockage, Data Factory à l'usage et un cluster Databricks à arrêt automatique : quelques dollars par jour d'utilisation. Supprimer le groupe de ressources à la fin.
+**Coût** : Azure SQL en offre gratuite (Serverless, pause automatique), Data Factory facturé à l'exécution, stockage et Key Vault à quelques centimes, Databricks Free Edition. Coût d'exécution quasi nul.
 
 ---
-Auteur : Hicham Errihani — [LinkedIn](https://www.linkedin.com/in/hicham-errihani-815755266) · [GitHub](https://github.com/Hicham-Errihani)
+
+## Auteur
+
+**Hicham Errihani** — Data Engineer / BI · ~20 ans dans la donnée · Master Ingénierie Informatique et Big Data
+[LinkedIn](https://www.linkedin.com/in/hicham-errihani-815755266) · [GitHub](https://github.com/HichamErrihani-Eng)
+
+Disponible pour des postes de Data Engineer confirmé ou Data Architect et pour des missions freelance (Azure, Databricks, Power BI).
+
+---
+
+## English summary
+
+End-to-end Azure data pipeline built as a portfolio project following a client-engagement approach. Three sources (Azure SQL, CSV, ECB REST API) are ingested by a metadata-driven, incremental Azure Data Factory pipeline into ADLS Gen2, then transformed with PySpark and Delta Lake (idempotent MERGE) through a Bronze/Silver/Gold architecture, secured with Key Vault and managed identities, and served in a 4-page Power BI report.
+
+Verified results: 2,624 rows on first load, 2 rows after updating 2 orders; 6/6 data quality checks passed; USD total of 956,323.59 identical in Silver, Gold and Power BI. Data: Microsoft AdventureWorksLT sample, real ECB exchange rates, fictitious sales targets.
