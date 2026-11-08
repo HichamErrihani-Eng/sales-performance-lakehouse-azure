@@ -58,7 +58,7 @@ flowchart LR
 
 **Pipeline d'ingestion SQL piloté par métadonnées** : une seule définition charge les 7 tables. Ajouter une table = ajouter une ligne dans `etl.ControlTable`.
 
-<img width="..." alt="adf_pipeline" src="https://github.com/user-attachments/assets/..." />
+![Pipeline Azure Data Factory](docs/adf_pipeline.PNG)
 
 ```
 lkp_control_table → ForEach (4 tables en parallèle)
