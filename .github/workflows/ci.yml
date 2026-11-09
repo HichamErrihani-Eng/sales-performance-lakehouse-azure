@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests-pyspark:
+    name: Tests des transformations (PySpark)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -v tests
+
+  valider-json-adf:
+    name: Validation des définitions Data Factory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          for f in $(find adf -name "*.json"); do
+            python -m json.tool "$f" > /dev/null || { echo "JSON invalide : $f"; exit 1; }
+          done
+          echo "Toutes les définitions ADF sont des JSON valides."
+
+  bicep:
+    name: Compilation Bicep
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: az bicep install && az bicep build --file infra/main.bicep
