@@ -3,12 +3,15 @@
 **Un pipeline de données de bout en bout qui répond chaque matin à une question de direction commerciale : atteignons-nous nos objectifs de ventes, par pays et par mois, en euros ?**
 
 ![Azure Data Factory](https://img.shields.io/badge/Azure_Data_Factory-0078D4?logo=microsoftazure&logoColor=white)
+![CI](https://github.com/HichamErrihani-Eng/sales-performance-lakehouse-azure/actions/workflows/ci.yml/badge.svg)
+![IaC](https://img.shields.io/badge/IaC-Bicep-0078D4?logo=microsoftazure&logoColor=white)
 ![ADLS Gen2](https://img.shields.io/badge/ADLS_Gen2-0078D4?logo=microsoftazure&logoColor=white)
 ![Databricks](https://img.shields.io/badge/Databricks-FF3621?logo=databricks&logoColor=white)
 ![Delta Lake](https://img.shields.io/badge/Delta_Lake-003366?logo=delta&logoColor=white)
 ![PySpark](https://img.shields.io/badge/PySpark-E25A1C?logo=apachespark&logoColor=white)
 ![Power BI](https://img.shields.io/badge/Power_BI-F2C811?logo=powerbi&logoColor=black)
 ![Key Vault](https://img.shields.io/badge/Key_Vault-0078D4?logo=microsoftazure&logoColor=white)
+
 
 ![Rapport Power BI — Vue d'ensemble](powerbi/01_vue_ensemble.png)
 
